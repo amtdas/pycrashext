@@ -141,6 +141,65 @@ def show_tlb(options):
         crashcolor.set_color(crashcolor.RESET)
 
 
+def show_cpuidle_driver(options):
+    if not symbol_exists("cpuidle_curr_driver"):
+        return
+    cpuidle_driver = readSymbol("cpuidle_curr_driver")
+    if cpuidle_driver == 0 or cpuidle_driver == None:
+        print("No cpuidle_driver registered")
+        return
+    print("driver: %s (struct cpuidle_driver 0x%x)" %
+          (cpuidle_driver.name, cpuidle_driver))
+    print("\n%-8s : %-37s %s" % ("state", "enter", "enter_dead"))
+    print("=" * 76)
+    for state in cpuidle_driver.states:
+        if state.name == "":
+            continue
+        enter = enter_dead = "<nop>"
+        if state.enter != 0:
+            enter = addr2sym(state.enter)
+        if state.enter_dead != 0:
+            enter_dead = addr2sym(state.enter_dead)
+
+        print("%-8s : 0x%x = %-15s  0x%x = %-15s" %
+              (state.name, state.enter, enter, state.enter_dead, enter_dead))
+        print("\tdesc: %s, exit_latency: %d, power_usage: %d" %
+              (state.desc, state.exit_latency, state.power_usage))
+
+
+cpu_capability_list = {
+    (0*32+ 9) : "X86_FEATURE_APIC",
+    (0*32+22) : "X86_FEATURE_ACPI",
+    (0*32+23) : "X86_FEATURE_MMX",
+    (4*32+ 3) : "X86_FEATURE_MWAIT",
+    (7*32+ 0) : "X86_FEATURE_RING3MWAIT",
+    (7*32+ 2) : "X86_FEATURE_CPB",
+    (7*32+ 3) : "X86_FEATURE_EPB",
+    (7*32+ 8) : "X86_FEATURE_HW_PSTATE",
+    (7*32+22) : "X86_FEATURE_USE_IBPB",
+    (7*32+25) : "X86_FEATURE_IBRS",
+    (7*32+26) : "X86_FEATURE_IBPB",
+    (7*32+27) : "X86_FEATURE_STIBP",
+    (7*32+30) : "X86_FEATURE_IBRS_ENHANCED",
+    (18*32+31) : "X86_FEATURE_SPEC_CTRL_SSBD",
+}
+
+def show_cpu_capability(options):
+    boot_cpu_data = readSymbol("boot_cpu_data")
+    for cap_idx, cap_str in cpu_capability_list.items():
+        idx = int(cap_idx / 32)
+        bit = (1 << (cap_idx % 32))
+        addr = boot_cpu_data.x86_capability[idx]
+        if (addr & bit) != 0:
+            enabled = "enabled"
+            crashcolor.set_color(crashcolor.LIGHTCYAN)
+        else:
+            enabled = "not enabled"
+            crashcolor.set_color(crashcolor.RED)
+        print("%s %s" % (cap_str, enabled))
+        crashcolor.set_color(crashcolor.RESET)
+
+
 def cpuinfo():
     op = OptionParser()
     op.add_option("-f", "--cpufreq", dest="cpufreq", default=0,
@@ -152,6 +211,12 @@ def cpuinfo():
     op.add_option("-t", "--tlb", dest="tlb", default=0,
                   action="store_true",
                   help="Show CPU tlb state")
+    op.add_option("-d", "--driver", dest="driver", default=0,
+                  action="store_true",
+                  help="Show CPU idle driver")
+    op.add_option("-c", "--capability", dest="capability", default=0,
+                  action="store_true",
+                  help="Show CPU capability")
 
     (o, args) = op.parse_args()
 
@@ -166,6 +231,14 @@ def cpuinfo():
 
     if (o.tlb):
         show_tlb(o)
+        sys.exit(0)
+
+    if (o.driver):
+        show_cpuidle_driver(o)
+        sys.exit(0)
+
+    if (o.capability):
+        show_cpu_capability(o)
         sys.exit(0)
 
     # default action

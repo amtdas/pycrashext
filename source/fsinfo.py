@@ -104,8 +104,11 @@ def all_filesystem_info(options):
             mnt_flags = vfsmnt.mnt_flags
 
 
-        if frozen_str != "SB_UNFROZEN":
+        if frozen_str == "SB_FREEZE_COMPLETE":
             crashcolor.set_color(crashcolor.LIGHTRED)
+        elif frozen_str == "SB_FREEZE_WRITE":
+            crashcolor.set_color(crashcolor.LIGHTCYAN)
+
         print ("SB: 0x%14x, frozen=%s, %s (%s) [%s], (%s)" %
                (sb, frozen_str,
                dentry_to_filename(sb.s_root), sb.s_id,
@@ -499,7 +502,7 @@ def show_extX_details(sb, fs_type):
             print("%-30s %d" % ("Reserved GDT blocks:", extX_super_block.s_reserved_gdt_blocks))
         # That's enough for now. The remaining will be implemented later if needed
         print("")
-        print("# Avilable %d MBytes on %s" % ((s_free_blocks_count * s_block_size) / (1024 * 1024), mnt_point))
+        print("# Available %d MBytes on %s" % ((s_free_blocks_count * s_block_size) / (1024 * 1024), mnt_point))
     except:
         print("Can't read details for 0x%x (%s)" % (sb, dentry_to_filename(sb.s_root)), end='')
         return
@@ -530,7 +533,7 @@ def show_xfs_details(sb, fs_type):
     print("%-30s %d" % ("free realtime extents", xfs_sb.sb_frextents))
 
     print("")
-    print("# Avilable %d MBytes on %s" % ((xfs_sb.sb_blocksize * xfs_sb.sb_fdblocks) / (1024 * 1024), mnt_point))
+    print("# Available %d MBytes on %s" % ((xfs_sb.sb_blocksize * xfs_sb.sb_fdblocks) / (1024 * 1024), mnt_point))
     pass
 
 def show_superblock(sb):
@@ -567,6 +570,22 @@ def show_dumpe2fs(options):
 
 
 
+def show_fsnotify_group(options):
+    fsnotify_group = readSU("struct fsnotify_group",
+                            int(options.fsnotify_group, 16))
+    notification_tasklist = fsnotify_group.notification_waitq.task_list
+    for wq in readSUListFromHead(notification_tasklist,
+                                 "task_list",
+                                 "struct __wait_queue"):
+        func = addr2sym(wq.func)
+        print(wq)
+        if func == "pollwake":
+            pwq = readSU("struct poll_wqueues", wq.private)
+            print("\tfunc: %s, task: %s <%s>" %
+                  (func, pwq.polling_task, pwq.polling_task.comm))
+
+
+
 def fsinfo():
     op = OptionParser()
     op.add_option("-d", "--details", dest="show_details", default=0,
@@ -593,6 +612,9 @@ def fsinfo():
     op.add_option("-p", "--dumpe2fs", dest="dumpe2fs", default="",
                   action="store",
                   help="Shows dumpe2fs like information")
+    op.add_option("-n", "--fsnotify", dest="fsnotify_group", default="",
+                  action="store",
+                  help="Show fsnotify details for fsnotify_group")
 
     (o, args) = op.parse_args()
 
@@ -616,6 +638,10 @@ def fsinfo():
         sys.exit(0)
     if (o.dumpe2fs != ""):
         show_dumpe2fs(o)
+        sys.exit(0)
+
+    if (o.fsnotify_group != ""):
+        show_fsnotify_group(o)
         sys.exit(0)
 
 
